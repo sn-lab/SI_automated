@@ -43,6 +43,7 @@ channel_options.pr = 'max'; %projection type to use across channels ('max' or 'm
 search_options.mpp = 43/objective_magnification; %microns per pixel (as scanimage understands it)
 search_options.search_range = 50; %microns from the current location to search for the template
 search_options.step_size = 5; %step size between slices
+search_options.fit_method = 'max';
 search_options.manual_check = 0; %whether to manually check the results
 
 
@@ -122,7 +123,7 @@ hSI.extTrigEnable = 0;
 
 fprintf('Acquiring 920 nm image series... ');
 hSI.startGrab();                
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+while ~strcmpi(hSI.acqState,'idle')
     pause(1);
 end
 fprintf('done.\n');
@@ -171,12 +172,15 @@ end
 hSI.hMotors.moveSample(samplePosition + [0 0 2*range]);
 answer = input('Adjust laser power, then click "Set STOP". Press any key to continue');
 if ~strcmpi(hSI.acqState,'idle')
-    answer = input('Abort current focus to continue. Press any key when done.');
+    hSI.abort();
+end
+while ~strcmpi(hSI.acqState,'idle')
+    pause(1);
 end
 
 fprintf('Acquiring 780 nm stack... ');
 hSI.startGrab();                
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+while ~strcmpi(hSI.acqState,'idle') 
     pause(1);
 end
 fprintf('done.\n');
@@ -224,7 +228,7 @@ end
 
 fprintf('Acquiring 920 nm stack... ');
 hSI.startGrab();                
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+while ~strcmpi(hSI.acqState,'idle') 
     pause(1);
 end
 fprintf('done.\n');
@@ -255,7 +259,7 @@ hSI.extTrigEnable = 0;
 
 fprintf('Acquiring spontaneous image series... ');
 hSI.startGrab();                
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+while ~strcmpi(hSI.acqState,'idle') 
     pause(1);
 end
 fprintf('done.\n');
@@ -356,7 +360,7 @@ for r = 1:vs.num_reps
     end
 end
             
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+while ~strcmpi(hSI.acqState,'idle') 
     pause(1);
 end
 fprintf('done.\n');
@@ -373,9 +377,8 @@ save(fullfile(vs.directory,filename),'vs')
 %close connection to display
 vs = teensyComm(vs, 'Disconnect'); %close connection to controller
 
-%%
 %combine folder into a single file
-[imageName, ~, ~] = combine_tifs({hSI.hScan2D.logFilePath}, [1 2 3 4]);
+[imageName, ~, ~] = combine_tifs_2({hSI.hScan2D.logFilePath}, [1 2 3 4]);
 
 % correct for motion and create a new template
 channel_options.chsh = [2 3 4]; %channels to use for registering shifts
