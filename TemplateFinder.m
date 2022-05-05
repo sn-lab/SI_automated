@@ -46,6 +46,7 @@ hSI.extTrigEnable = 0;
 moveDist = round(0.2*min([templateHeight templateWidth]));
 
 %acquire images at 3 nearby locations at the same depth
+fprintf('Acquiring images to calibrate pixels/micron... ');
 hSI.startGrab(); %starting location          
 while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
     pause(1);
@@ -57,13 +58,16 @@ while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
     pause(1);
 end
 hSI.hScan2D.logFileCounter = 3;
-hSI.hMotors.moveSample(samplePosition + [-moveDist moveDist 0]);
+hSI.hMotors.moveSample(samplePosition + [0 moveDist 0]);
 hSI.startGrab(); %moved small amount in y direction            
 while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
     pause(1);
 end
-hSI.hMotors.moveSample(samplePosition + [0 -moveDist 0]);  %move back to start    
+hSI.hMotors.moveSample(samplePosition);  %move back to start 
+fprintf('done.\n');
 
+
+%%
 %load the 3 images
 grabs = nan([templateHeight templateWidth 3]);
 for i = 1:3
@@ -100,7 +104,7 @@ stackName = fullfile(hSI.hScan2D.logFilePath,[hSI.hScan2D.logFileStem '_' sprint
 if isfile(stackName)
     delete(stackName)
 end
-
+%%
 %acquire a stack
 hSI.startGrab();      
 fprintf('Acquiring a stack centered on the current depth... ');
@@ -170,20 +174,20 @@ switch search_options.fit_method
         frames = channel_options.chsh + channel_options.nch*(s-1);
         frame = max(tempstack(:,:,frames),[],3,'omitnan'); %create composite frame
         imr_tform = imregtform(frame,template,'translation',optimizer,metric);
-        best_frame_reg = imwarp(frame,imr_tform,'OutputView',imref2d(size(template)));
+        best_frame_reg = double(imwarp(frame,imr_tform,'OutputView',imref2d(size(template))));
         
     otherwise
         error('Only ''max'' fit method is implemented so far') 
 end
-
+%%
 %convert shifts from pixels to x and y movements
-best_fit_shifts = ppm\best_fit_shift_pixels;
+best_fit_shifts = -round(ppm\best_fit_shift_pixels)';
 best_fit_shifts(3) = zPos(max_R_ind);
 shift_string = sprintf('shifts: \nx=%d, y=%d, z=%d\n',best_fit_shifts);
     
 if search_options.manual_check
     manualFig = figure();
-    imshow([template/max(template,'all') best_frame_reg/max(best_frame_reg,'all')])
+    imshow([template/max(template,[],'all') best_frame_reg/max(best_frame_reg,[],'all')])
     %ask for input to decide status
     answer = input('Continue with current result, or manually adjust? (1=continue, 2=manual, 3=stop script): ');
     switch answer
@@ -204,7 +208,9 @@ if search_options.manual_check
         otherwise
             error('Only 1, 2, and 3 are valid options')
     end
-    close(manualFig);
+    if ishghandle(manualFig)
+        close(manualFig);
+    end
 else
     if max_R>0.95
         fprintf(['template location found! (R = ' num2str(max_R) ')\n']);
