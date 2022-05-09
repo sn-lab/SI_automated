@@ -32,20 +32,6 @@ sessionName = 'templatefindertest1';
 alignToPrevious = true;
 previousTemplateName = 'C:\Users\schafferlab\Desktop\Visual Cortex\2022-05-08 fulltest_beforeLy6g_22_5_8\MC 1030_00001\TEMPLATE_1030_00001.tif';
 
-%TESTING: align imaging to previous template
-if alignToPrevious
-    wavelength = 0;
-    while wavelength~=1030
-        answer = input('Set laser source to satsuma 1030 nm and optimize the power. Enter the current wavelength to continue: ');
-        if ~isempty(answer)
-            wavelength = answer;
-        end
-    end
-    [status, ~, search_options] = TemplateFinder(previousTemplateName,channel_options,search_options,hSI);
-    assert(status,'template not found; exiting script');
-end
-
-
 
 %% imaging session setup
 assert(strcmpi(hSI.acqState,'idle'),'scanimage is busy');   % make sure scanimage is in an idle state
