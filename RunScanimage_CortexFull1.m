@@ -26,11 +26,11 @@
 
 %set session name
 baseDir = 'C:\Users\schafferlab\Desktop\Visual Cortex';
-sessionName = 'templatefindertest1';
+sessionName = 'fulltest4';
 
 %(optional) align to a previously acquired template?
-alignToPrevious = true;
-previousTemplateName = 'C:\Users\schafferlab\Desktop\Visual Cortex\2022-05-08 fulltest_beforeLy6g_22_5_8\MC 1030_00001\TEMPLATE_1030_00001.tif';
+alignToPrevious = false;
+previousTemplateName = '';
 
 
 %% imaging session setup
