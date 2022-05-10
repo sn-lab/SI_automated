@@ -1,4 +1,4 @@
-function [status, best_fit_shifts] = TemplateFinder(templateName,channel_options,search_options,hSI)
+function [status, best_fit_shifts, search_options] = TemplateFinder(templateName,channel_options,search_options,hSI)
 % FUNCTION TemplateFinder(templateName,channel_options,search_options)
 %
 % Automatically find and move to a location in the sample that most closely
@@ -24,76 +24,81 @@ assert(strcmpi(hSI.acqState,'idle'),'scanimage is busy');   % make sure scanimag
 zPos = -search_options.search_range:search_options.step_size:search_options.search_range;
 num_slices = length(zPos);
 samplePosition = hSI.hMotors.samplePosition; %get current sample position
+framesPerSlice = 5;
+numChannels = 4;
+[optimizer, metric] = imregconfig('multimodal');
 
 %load the template
 template = read_file(templateName);
 [templateHeight,templateWidth] = size(template);
 
-%set imaging parameters for single images
-assert(strcmpi(hSI.acqState,'idle'),'scanimage is busy');   % make sure scanimage is in an idle state
-hSI.hStackManager.enable = 0;
-hSI.hRoiManager.scanZoomFactor = 1;     % define the zoom factor
-hSI.hStackManager.framesPerSlice = 1;   % set number of frames to capture in one Grab
-hSI.hStackManager.numSlices = 1;
-hSI.hStackManager.numVolumes = 1;
-hSI.hChannels.loggingEnable = 1;     % enable logging
-hSI.hChannels.channelSave = [1 2 3 4];
-hSI.hScan2D.logFileStem = 'tempGrab';      % set the base file name for the Tiff file
-hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
-hSI.hRoiManager.linesPerFrame = templateHeight;
-hSI.hRoiManager.pixelsPerLine = templateWidth;
-hSI.extTrigEnable = 0;
-moveDist = round(0.2*min([templateHeight templateWidth]));
+%% if ppm isn't supplied, calculate it here:
+if ~isfield(search_options,'ppm') || isempty(search_options.ppm)
+    %set imaging parameters for single images
+    assert(strcmpi(hSI.acqState,'idle'),'scanimage is busy');   % make sure scanimage is in an idle state
+    hSI.hStackManager.enable = 0;
+    hSI.hRoiManager.scanZoomFactor = 1;     % define the zoom factor
+    hSI.hStackManager.framesPerSlice = 1;   % set number of frames to capture in one Grab
+    hSI.hStackManager.numSlices = 1;
+    hSI.hStackManager.numVolumes = 1;
+    hSI.hChannels.loggingEnable = 1;     % enable logging
+    hSI.hChannels.channelSave = [1 2 3 4];
+    hSI.hScan2D.logFileStem = 'tempGrab';      % set the base file name for the Tiff file
+    hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
+    hSI.hRoiManager.linesPerFrame = templateHeight;
+    hSI.hRoiManager.pixelsPerLine = templateWidth;
+    hSI.extTrigEnable = 0;
+    moveDist = round(0.2*min([templateHeight templateWidth]));
 
-%acquire images at 3 nearby locations at the same depth
-fprintf('Acquiring images to calibrate pixels/micron... ');
-hSI.startGrab(); %starting location          
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
-    pause(1);
+    %acquire images at 3 nearby locations at the same depth
+    fprintf('Acquiring images to calibrate pixels/micron... ');
+    hSI.startGrab(); %starting location          
+    while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+        pause(1);
+    end
+    hSI.hScan2D.logFileCounter = 2;
+    hSI.hMotors.moveSample(samplePosition + [moveDist 0 0]);
+    hSI.startGrab(); %moved small amount in x direction                
+    while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+        pause(1);
+    end
+    hSI.hScan2D.logFileCounter = 3;
+    hSI.hMotors.moveSample(samplePosition + [0 moveDist 0]);
+    hSI.startGrab(); %moved small amount in y direction            
+    while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
+        pause(1);
+    end
+    hSI.hMotors.moveSample(samplePosition);  %move back to start 
+    fprintf('done.\n');
+
+    %load the 3 images
+    grabs = nan([templateHeight templateWidth 3]);
+    for i = 1:3
+        grabName = fullfile(hSI.hScan2D.logFilePath,[hSI.hScan2D.logFileStem '_' sprintf(['%0' num2str(5) 'd'],i) '.tif']);
+        grab = read_file(grabName);
+        grabs(:,:,i) = max(grab(:,:,channel_options.chsh),[],3,'omitnan'); %create composite frame
+        delete(grabName)
+    end
+
+    %calculate the pixels-per-micron conversion factors for the current state of the microscope
+    %a*x = b
+    %x = a\b - matrix left division to solve system of linear equations
+    %x = micron movements (e.g. [1;1])
+    %a = ppm (e.g. [ppm_x' ppm_y'])
+    %b = pixel movements (e.g. imr_tform.T(3,[1 2])')
+    imr_tform = imregtform(grabs(:,:,2),grabs(:,:,1),'translation',optimizer,metric); %movement in pixels
+    search_options.ppm(:,1) = imr_tform.T(3,[1 2])'/moveDist; %ppm (for x micron movements)
+    imr_tform = imregtform(grabs(:,:,3),grabs(:,:,1),'translation',optimizer,metric);
+    search_options.ppm(:,2) = imr_tform.T(3,[1 2])'/moveDist; %ppm (for y micron movements)
 end
-hSI.hScan2D.logFileCounter = 2;
-hSI.hMotors.moveSample(samplePosition + [moveDist 0 0]);
-hSI.startGrab(); %moved small amount in x direction                
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
-    pause(1);
-end
-hSI.hScan2D.logFileCounter = 3;
-hSI.hMotors.moveSample(samplePosition + [0 moveDist 0]);
-hSI.startGrab(); %moved small amount in y direction            
-while ~strcmpi(hSI.acqState,'idle') %could also be 'grab' (or 'loop'?)
-    pause(1);
-end
-hSI.hMotors.moveSample(samplePosition);  %move back to start 
-fprintf('done.\n');
 
 
-%%
-%load the 3 images
-grabs = nan([templateHeight templateWidth 3]);
-for i = 1:3
-    grabName = fullfile(hSI.hScan2D.logFilePath,[hSI.hScan2D.logFileStem '_' sprintf(['%0' num2str(5) 'd'],i) '.tif']);
-    grab = read_file(grabName);
-    grabs(:,:,i) = max(grab(:,:,channel_options.chsh),[],3,'omitnan'); %create composite frame
-    delete(grabName)
-end
-
-%calculate the pixels-per-micron conversion factors for the current state of the microscope
-%a*x = b
-%x = a\b - matrix left division to solve system of linear equations
-%x = micron movements (e.g. [1;1])
-%a = ppm (e.g. [ppm_x' ppm_y'])
-%b = pixel movements (e.g. imr_tform.T(3,[1 2])')
-[optimizer, metric] = imregconfig('multimodal');
-imr_tform = imregtform(grabs(:,:,2),grabs(:,:,1),'translation',optimizer,metric); %movement in pixels
-ppm(:,1) = imr_tform.T(3,[1 2])'/moveDist; %ppm (for x micron movements)
-imr_tform = imregtform(grabs(:,:,3),grabs(:,:,1),'translation',optimizer,metric);
-ppm(:,2) = imr_tform.T(3,[1 2])'/moveDist; %ppm (for y micron movements)
-    
 %set imaging parameters for a stack
 hSI.hScan2D.logFileStem = 'tempstack';
 hSI.hScan2D.logFileCounter = 1;
 hSI.hStackManager.enable = 1;
 hSI.hStackManager.centeredStack = 1;
+hSI.hStackManager.framesPerSlice = framesPerSlice;
 hSI.hStackManager.stackDefinition = 'uniform';
 hSI.hStackManager.stackMode = 'slow';
 hSI.hStackManager.stackReturnHome = 1;
@@ -104,6 +109,7 @@ stackName = fullfile(hSI.hScan2D.logFilePath,[hSI.hScan2D.logFileStem '_' sprint
 if isfile(stackName)
     delete(stackName)
 end
+
 %%
 %acquire a stack
 hSI.startGrab();      
@@ -112,8 +118,13 @@ while ~strcmpi(hSI.acqState,'idle')
     pause(1);
 end
 fprintf('done.\n');
+
 %load the stack 
 tempstack = read_file(stackName);
+tempstack = reshape(tempstack,[templateHeight templateWidth numChannels framesPerSlice num_slices]);
+tempstack = mean(tempstack,4); %average framesPerSlice (if >1)
+tempstack = max(tempstack(:,:,channel_options.chsh,:,:),[],3,'omitnan');  %create composite frames
+tempstack = permute(tempstack,[1 2 5 3 4]);
 
 %register each frame of the stack to the template
 R = nan(1,num_slices);
@@ -122,8 +133,7 @@ fprintf(['Registering ' num2str(num_slices) ' slices to the template... ' str])
 for s = 1:num_slices
     fprintf([repmat('\b',[1 length(str)]) num2str(s)])
     str = num2str(s);
-    frames = channel_options.chsh + channel_options.nch*(s-1);
-    frame = max(tempstack(:,:,frames),[],3,'omitnan'); %create composite frame
+    frame = tempstack(:,:,s);
     
     %perform rigid motion registration on the composite to the template
     imr_tform = imregtform(frame,template,'translation',optimizer,metric);
@@ -170,9 +180,7 @@ switch search_options.fit_method
     case 'max'
         [max_R,max_R_ind] = max(R);
         best_fit_shift_pixels = shifts(max_R_ind,:)';
-        s = max_R_ind;
-        frames = channel_options.chsh + channel_options.nch*(s-1);
-        frame = max(tempstack(:,:,frames),[],3,'omitnan'); %create composite frame
+        frame = tempstack(:,:,max_R_ind); 
         imr_tform = imregtform(frame,template,'translation',optimizer,metric);
         best_frame_reg = double(imwarp(frame,imr_tform,'OutputView',imref2d(size(template))));
         
@@ -181,9 +189,22 @@ switch search_options.fit_method
 end
 %%
 %convert shifts from pixels to x and y movements
-best_fit_shifts = -round(ppm\best_fit_shift_pixels)';
+best_fit_shifts = -round(search_options.ppm\best_fit_shift_pixels)';
 best_fit_shifts(3) = zPos(max_R_ind);
 shift_string = sprintf('shifts: \nx=%d, y=%d, z=%d\n',best_fit_shifts);
+    
+if max_R>0.95
+    fprintf(['template location found! (R = ' num2str(max_R) ')\n']);
+    fprintf(shift_string);
+    status = 1;
+elseif max_R>0.8
+    fprintf(['possible template location found. (R = ' num2str(max_R) ')\n']);
+    fprintf(shift_string);
+    status = 2;
+else
+    fprintf(['low confidence that template location was found. (max R = ' num2str(max_R) ')\n']);
+    status = 0;
+end
     
 if search_options.manual_check
     manualFig = figure();
@@ -194,7 +215,7 @@ if search_options.manual_check
         case 1
             status = 1;
         case 2
-            answer = input('Manually adjust, then decide the next step. (1=continue, 3=stop script): ');
+            answer = input('Try manually adjusting, then decide the next step. (1=continue, 3=stop script): ');
             switch answer
                 case 1
                     status = 3;
@@ -210,19 +231,6 @@ if search_options.manual_check
     end
     if ishghandle(manualFig)
         close(manualFig);
-    end
-else
-    if max_R>0.95
-        fprintf(['template location found! (R = ' num2str(max_R) ')\n']);
-        fprintf(shift_string);
-        status = 1;
-    elseif max_R>0.8
-        fprintf(['possible template location found. (R = ' num2str(max_R) ')\n']);
-        fprintf(shift_string);
-        status = 2;
-    else
-        fprintf(['template location not found. (max R = ' num2str(max_R) ')\n']);
-        status = 0;
     end
 end
 

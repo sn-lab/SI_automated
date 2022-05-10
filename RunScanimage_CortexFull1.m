@@ -43,7 +43,7 @@ assert(~isfolder(sessionDir),['sessionName "' sessionDir '" already exists.'])
 input('On breathing sensor, select "save to file" and start recording. Enter any key to continue: ');
 
 %connect to teensyvis
-if exist('vs','var')
+if exist('vs','var')&&isfield(vs,'controller')
     teensyComm(vs, 'Disconnect');
     clear vs %clear "vis-struct"
 end
@@ -69,6 +69,7 @@ channel_options.pr = 'max'; %projection type to use across channels ('max' or 'm
 search_options.search_range = 50; %microns from the current location to search for the template
 search_options.step_size = 5; %step size between slices
 search_options.fit_method = 'max';
+search_options.ppm = [];
 search_options.manual_check = 1; %whether to manually check the results
 waterCheckTime = 60*20; %number of seconds until the water level between the objective and the sample should to be checked
 lastWaterCheckTime = clock; %when the water level was last checked
@@ -82,7 +83,7 @@ if alignToPrevious
             wavelength = answer;
         end
     end
-    [status, ~] = TemplateFinder(previousTemplateName,channel_options,search_options,hSI);
+    [status, ~, search_options] = TemplateFinder(previousTemplateName,channel_options,search_options,hSI);
     assert(status,'template not found; exiting script');
 end
 
@@ -92,7 +93,7 @@ end
 section_number = 1;
 imageNamePart = '1030_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -102,8 +103,8 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
@@ -134,7 +135,7 @@ hSI.hStackManager.framesPerSlice = ceil(fps*color_duration);   % set number of f
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction' hSI.hStackManager.stackEndPowerFraction'];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
 fprintf('Acquiring 1030 nm image series... ');
@@ -150,7 +151,7 @@ channel_options.chsh = [2 3]; %channels to use for registering shifts
 [status, templateName_1030, ~] = run_multichannel_normcorre('imageName',fullfile(sessionDir,[imageNamePart '.tif']),'channelOptions',channel_options);
 assert(strcmp(status,'success'),'motion correction did not finish successfully');
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% take an image series at 920 nm
@@ -158,7 +159,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 section_number = 2;
 imageNamePart = '920_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -168,14 +169,14 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
 wavelength = 0;
 while wavelength~=920
-    answer = input('Set laser source to satsuma 920 nm and optimize the power. Enter the current wavelength to continue: ');
+    answer = input('Set laser source to chameleon 920 nm and optimize the power. Enter the current wavelength to continue: ');
     if ~isempty(answer)
         wavelength = answer;
     end
@@ -185,7 +186,7 @@ end
 channel_options.chsh = [2 3];
 search_options.search_range = 40;
 search_options.step_size = 2;
-[status, ~] = TemplateFinder(templateName_1030,channel_options,search_options,hSI);
+[status, ~, search_options] = TemplateFinder(templateName_1030,channel_options,search_options,hSI);
 assert(status,'template not found; exiting script');
     
 %set imaging parameters
@@ -207,7 +208,7 @@ hSI.hStackManager.framesPerSlice = ceil(fps*color_duration);   % set number of f
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
 fprintf('Acquiring 920 nm image series... ');
@@ -223,7 +224,7 @@ channel_options.chsh = [2 3 4]; %channels to use for registering shifts
 [status, templateName_920, ~] = run_multichannel_normcorre('imageName',fullfile(sessionDir,[imageNamePart '.tif']),'channelOptions',channel_options);
 assert(strcmp(status,'success'),'motion correction did not finish successfully');
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% take a stack at 780
@@ -231,7 +232,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 section_number = 3;
 imageNamePart = 'plaques_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -241,13 +242,13 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
 while wavelength~=780
-    answer = input('Set laser source to satsuma 780 nm and optimize the power. Enter the current wavelength to continue: ');
+    answer = input('Set laser source to chameleon 780 nm and optimize the power. Enter the current wavelength to continue: ');
     if ~isempty(answer)
         wavelength = answer;
     end
@@ -273,10 +274,10 @@ hSI.hStackManager.stackZStepSize = step_size;
 hSI.hBeams.pzAdjust(1) = 'Exponential';
 hSI.hBeams.pzAdjust(2) = 'Exponential';
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
-hSI.hMotors.moveSample(samplePosition(3,:) + [0 0 -range]);
+hSI.hMotors.moveSample(samplePosition(3,:) + [0 0 range]);
 hSI.startFocus();
 opts.Interpreter = 'tex';
 opts.Default = 'Continue';
@@ -284,7 +285,7 @@ input('Adjust laser power, then click "Set START". Press any key to continue');
 if strcmpi(hSI.acqState,'idle')
     hSI.startFocus();
 end
-hSI.hMotors.moveSample(samplePosition(3,:) + [0 0 range]);
+hSI.hMotors.moveSample(samplePosition(3,:) + [0 0 -range]);
 input('Adjust laser power, then click "Set END". Press any key to continue');
 if ~strcmpi(hSI.acqState,'idle')
     hSI.abort();
@@ -303,7 +304,7 @@ fprintf('done.\n');
 hSI.hMotors.moveSample(samplePosition(3,:));
 pause(2);
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% take a stack at 920
@@ -311,7 +312,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 section_number = 4;
 imageNamePart = 'vessels_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -321,14 +322,14 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
 wavelength = 0;
 while wavelength~=920
-    answer = input('Set laser source to satsuma 920 nm and optimize the power. Enter the current wavelength to continue: ');
+    answer = input('Set laser source to chameleon 920 nm and optimize the power. Enter the current wavelength to continue: ');
     if ~isempty(answer)
         wavelength = answer;
     end
@@ -352,10 +353,10 @@ hSI.acqsPerLoop = 1;
 hSI.hStackManager.boundedStackDefinition = 'stepSize';
 hSI.hStackManager.stackZStepSize = step_size;
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
-hSI.hMotors.moveSample(samplePosition(4,:) + [0 0 -range]);
+hSI.hMotors.moveSample(samplePosition(4,:) + [0 0 range]);
 hSI.startFocus();
 opts.Interpreter = 'tex';
 opts.Default = 'Continue';
@@ -363,7 +364,7 @@ input('Adjust laser power, then click "Set START". Press any key to continue');
 if strcmpi(hSI.acqState,'idle')
     hSI.startFocus();
 end
-hSI.hMotors.moveSample(samplePosition(4,:) + [0 0 range]);
+hSI.hMotors.moveSample(samplePosition(4,:) + [0 0 -range]);
 input('Adjust laser power, then click "Set END". Press any key to continue');
 if ~strcmpi(hSI.acqState,'idle')
     hSI.abort();
@@ -382,7 +383,7 @@ fprintf('done.\n');
 hSI.hMotors.moveSample(samplePosition(4,:));
 pause(2);
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% take a long image series at 920 (for spontaneous activity)
@@ -390,7 +391,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 section_number = 5;
 imageNamePart = 'spont_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -400,8 +401,8 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     answer = input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
@@ -409,7 +410,7 @@ end
 hSI.hBeams.powers = powers(2,:);
 wavelength = 0;
 while wavelength~=920
-    answer = input('Check that the laser source is satsuma 920 nm. Enter the current wavelength to continue: ');
+    answer = input('Check that the laser source is chameleon 920 nm. Enter the current wavelength to continue: ');
     if ~isempty(answer)
         wavelength = answer;
     end
@@ -419,7 +420,7 @@ end
 channel_options.chsh = [2 3 4];
 search_options.search_range = 20;
 search_options.step_size = 2;
-[status, ~] = TemplateFinder(templateName_920,channel_options,search_options,hSI);
+[status, ~, search_options] = TemplateFinder(templateName_920,channel_options,search_options,hSI);
 assert(status,'template not found; exiting script');
     
 %set imaging parameters
@@ -441,7 +442,7 @@ hSI.hStackManager.framesPerSlice = ceil(fps*spontaneous_duration);   % set numbe
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
 fprintf('Acquiring spontaneous image series... ');
@@ -457,7 +458,7 @@ channel_options.chsh = [2 3 4]; %channels to use for registering shifts
 [status, ~, ~] = run_multichannel_normcorre('imageName',fullfile(sessionDir,[imageNamePart '.tif']),'channelOptions',channel_options);
 assert(strcmp(status,'success'),'motion correction did not finish successfully');
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% take a long, externally-triggered image series at 920 (for directional tuning)
@@ -465,7 +466,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 section_number = 6;
 imageNamePart = 'stim_00001';
 if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
-    answer = input(['imaging section ' section_number ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
+    answer = input(['imaging section ' num2str(section_number) ' file already exists. Overwrite the file? 1=overwrite, 0=stop script: ']);
     if answer==1
         rmdir(fullfile(sessionDir,[imageNamePart '.tif']));
         if isfolder(fullfile(sessionDir,['MC ' imageNamePart]))
@@ -478,14 +479,14 @@ if isfile(fullfile(sessionDir,[imageNamePart '.tif']))
         error('Exiting script')
     end
 end
-timestamps(section_number) = clock;
-if etime(timestamps(section_number),lastWaterCheckTime)>waterCheckTime
+timestamps(section_number,:) = clock;
+if etime(timestamps(section_number,:),lastWaterCheckTime)>waterCheckTime
     answer = input('Check the water level between the objective and the sample. Enter any key to continue: ');
     lastWaterCheckTime = clock;
 end
 wavelength = 0;
 while wavelength~=920
-    answer = input('Check that the laser source is satsuma 920 nm. Enter the current wavelength to continue: ');
+    answer = input('Check that the laser source is chameleon 920 nm. Enter the current wavelength to continue: ');
     if ~isempty(answer)
         wavelength = answer;
     end
@@ -495,7 +496,7 @@ end
 channel_options.chsh = [2 3 4];
 search_options.search_range = 20;
 search_options.step_size = 2;
-[status, ~] = TemplateFinder(templateName_920,channel_options,search_options,hSI);
+[status, ~, search_options] = TemplateFinder(templateName_920,channel_options,search_options,hSI);
 assert(status,'template not found; exiting script');
 
 %set stimulus experiment parameters
@@ -535,7 +536,7 @@ hSI.acqsPerLoop = vs.num_trials*vs.num_reps;
 hSI.extTrigEnable = 1;
 mkdir(hSI.hScan2D.logFilePath);
 powers(section_number,:) = hSI.hBeams.powers; %get current power
-startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
+%startEndPowers(section_number,:) = [hSI.hStackManager.stackStartPowerFraction hSI.hStackManager.stackEndPowerFraction];
 samplePosition(section_number,:) = hSI.hMotors.samplePosition; %get current sample position
 
 %create order in which conditions will be presented
@@ -597,7 +598,7 @@ channel_options.chsh = [2 3 4]; %channels to use for registering shifts
 [status, ~, ~] = run_multichannel_normcorre('imageName',imageName,'channelOptions',channel_options);
 assert(strcmp(status,'success'),'motion correction did not finish successfully');
 
-fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
+fprintf(['Imaging section number ' num2str(section_number) ' successfully finished.\n']);
 
 
 %% save and finish experiment
@@ -605,7 +606,7 @@ fprintf(['Imaging section number ' section_number ' successfully finished.\n']);
 vs = teensyComm(vs, 'Disconnect'); %close connection to controller
 
 metadata.powers = powers;
-metadata.startEndPowers = startEndPowers;
+%metadata.startEndPowers = startEndPowers;
 metadata.samplePosition = samplePosition;
 metadata.timestamps = timestamps;
 save(fullfile(sessionDir,[current_datestr ' ' sessionName ' metadata.mat']),'metadata')
