@@ -1,4 +1,6 @@
 
+%%%%%%%%todo: correctly save startend powers
+%%%%%%%%test out unmixing, saving suite2p file
 % BEFORE RUNNING THIS SCRIPT
 % 
 % 1. Head-fix the mouse
@@ -54,11 +56,13 @@ vs = teensyComm(vs, 'Connect');
 mkdir(sessionDir);
 
 %set common imaging parameters
+iseriesHeight = 256;
+iseriesWidth = 256;
 hSI.hRoiManager.scanZoomFactor = 1;     % define the zoom factor
 hSI.hStackManager.framesPerSlice = 1;   % set number of frames to capture in one Grab
 hSI.hStackManager.numVolumes = 1;
-hSI.hRoiManager.linesPerFrame = 256;
-hSI.hRoiManager.pixelsPerLine = 256;
+hSI.hRoiManager.linesPerFrame = iseriesHeight;
+hSI.hRoiManager.pixelsPerLine = iseriesWidth;
 hSI.hChannels.loggingEnable = 1;     % enable logging
 hSI.hChannels.channelSave = [1 2 3 4];
 hSI.hChannels.channelMergeColor = {'blue'  'green'  'gray'  'red'};
@@ -128,8 +132,8 @@ hSI.hStackManager.enable = 0;
 hSI.hScan2D.logFilePath = sessionDir;        % set the folder for logging Tiff files
 hSI.hScan2D.logFileStem = '1030';      % set the base file name for the Tiff file
 hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
-hSI.hRoiManager.linesPerFrame = 256;
-hSI.hRoiManager.pixelsPerLine = 256;
+hSI.hRoiManager.linesPerFrame = iseriesHeight;
+hSI.hRoiManager.pixelsPerLine = iseriesWidth;
 fps = hSI.hRoiManager.scanFrameRate;
 hSI.hStackManager.framesPerSlice = ceil(fps*color_duration);   % set number of frames to capture in one Grab
 hSI.extTrigEnable = 0;
@@ -201,8 +205,8 @@ hSI.hStackManager.enable = 0;
 hSI.hScan2D.logFilePath = sessionDir;        % set the folder for logging Tiff files
 hSI.hScan2D.logFileStem = '920';      % set the base file name for the Tiff file
 hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
-hSI.hRoiManager.linesPerFrame = 256;
-hSI.hRoiManager.pixelsPerLine = 256;
+hSI.hRoiManager.linesPerFrame = iseriesHeight;
+hSI.hRoiManager.pixelsPerLine = iseriesWidth;
 fps = hSI.hRoiManager.scanFrameRate;
 hSI.hStackManager.framesPerSlice = ceil(fps*color_duration);   % set number of frames to capture in one Grab
 hSI.extTrigEnable = 0;
@@ -265,8 +269,8 @@ hSI.hStackManager.stackDefinition = 'bounded';
 hSI.hStackManager.stackMode = 'slow';
 hSI.hStackManager.stackReturnHome = 1;
 hSI.hStackManager.framesPerSlice = 1;
-hSI.hRoiManager.linesPerFrame = 512;
-hSI.hRoiManager.pixelsPerLine = 512;
+hSI.hRoiManager.linesPerFrame = stackHeight;
+hSI.hRoiManager.pixelsPerLine = stackWidth;
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 hSI.hStackManager.boundedStackDefinition = 'stepSize';
@@ -346,8 +350,8 @@ hSI.hStackManager.stackDefinition = 'bounded';
 hSI.hStackManager.stackMode = 'slow';
 hSI.hStackManager.stackReturnHome = 1;
 hSI.hStackManager.framesPerSlice = 1;
-hSI.hRoiManager.linesPerFrame = 512;
-hSI.hRoiManager.pixelsPerLine = 512;
+hSI.hRoiManager.linesPerFrame = stackHeight;
+hSI.hRoiManager.pixelsPerLine = stackWidth;
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 hSI.hStackManager.boundedStackDefinition = 'stepSize';
@@ -435,10 +439,11 @@ hSI.hStackManager.enable = 0;
 hSI.hScan2D.logFilePath = sessionDir;        % set the folder for logging Tiff files
 hSI.hScan2D.logFileStem = 'spont';      % set the base file name for the Tiff file
 hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
-hSI.hRoiManager.linesPerFrame = 256;
-hSI.hRoiManager.pixelsPerLine = 256;
+hSI.hRoiManager.linesPerFrame = iseriesHeight;
+hSI.hRoiManager.pixelsPerLine = iseriesWidth;
 fps = hSI.hRoiManager.scanFrameRate;
-hSI.hStackManager.framesPerSlice = ceil(fps*spontaneous_duration);   % set number of frames to capture in one Grab
+spontaneousFrames = ceil(fps*spontaneous_duration);
+hSI.hStackManager.framesPerSlice = spontaneousFrames;   % set number of frames to capture in one Grab
 hSI.extTrigEnable = 0;
 hSI.acqsPerLoop = 1;
 powers(section_number,:) = hSI.hBeams.powers; %get current power
@@ -528,10 +533,11 @@ hSI.hStackManager.enable = 0;
 hSI.hScan2D.logFilePath = fullfile(sessionDir,'stim');        % set the folder for logging Tiff files
 hSI.hScan2D.logFileStem = '';      % set the base file name for the Tiff file
 hSI.hScan2D.logFileCounter = 1;         % set the current Tiff file number
-hSI.hRoiManager.linesPerFrame = 256;
-hSI.hRoiManager.pixelsPerLine = 256;
+hSI.hRoiManager.linesPerFrame = iseriesHeight;
+hSI.hRoiManager.pixelsPerLine = iseriesWidth;
 fps = hSI.hRoiManager.scanFrameRate;
 hSI.hStackManager.framesPerSlice = ceil(fps*6);   % set number of frames to capture in one Grab
+stimulatedFrames = ceil(fps*6)*vs.num_trials*vs.num_reps;
 hSI.acqsPerLoop = vs.num_trials*vs.num_reps;
 hSI.extTrigEnable = 1;
 mkdir(hSI.hScan2D.logFilePath);
@@ -602,11 +608,27 @@ fprintf(['Imaging section number ' num2str(section_number) ' successfully finish
 
 
 %% save and finish experiment
-%close connection to display
-vs = teensyComm(vs, 'Disconnect'); %close connection to controller
-
+%save metadata
 metadata.powers = powers;
 %metadata.startEndPowers = startEndPowers;
 metadata.samplePosition = samplePosition;
 metadata.timestamps = timestamps;
+metadata.numFrames.spontaneous = spontaneousFrames;
+metadata.numFrames.stimulated = stimulatedFrames;
 save(fullfile(sessionDir,[current_datestr ' ' sessionName ' metadata.mat']),'metadata')
+fprintf('Metadata file saved.\n')
+
+%make sure all critical data has been collected
+folder_spont = fullfile(sessionDir,'MC spont_00001');
+folder_stim = fullfile(sessionDir,'MC stim_00001');
+assert(isfolder(folder_spont)&&isfolder(folder_stim),'Cannot find both spontaneous and stimulated motion-corrected imaging folders');
+folder_920 = fullfile(sessionDir,'MC 920_00001');
+folder_1030 = fullfile(sessionDir,'MC 1030_00001');
+assert(isfolder(folder_920)&&isfolder(folder_1030),'Cannot find both 1030 nm and 920 nm motion-corrected imaging folders');
+
+%close connection to display
+vs = teensyComm(vs, 'Disconnect'); %close connection to controller
+fprintf('Communication with display disconnected.\n')
+
+fprintf('Script finished.\n\n')
+
